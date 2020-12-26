@@ -1,0 +1,88 @@
+#!/bin/sh
+
+get_available_storage(){
+    df -h /dev/sda3 | tail -1 | tr -s ' ' | cut -d' ' -f4
+}
+
+get_keyboard_code(){
+    setxkbmap -query | grep layout | tr -s ' ' | cut -d' ' -f2 | tr '[a-z]' '[A-Z]'
+}
+
+get_sound_volume(){
+    amixer sget Master | grep -o -E '([0-9]+)%' | head -1
+}
+
+get_sound_status(){
+    amixer sget Master | grep -o -E '\[(on|off)\]' | head -1 | tr -d '[]' | tr '[a-z]' '[A-Z]'
+}
+
+get_time_date(){
+    date "+%F %H:%M:%S"
+}
+
+display_available_storage(){
+    echo -n "$(get_available_storage) | "
+}
+
+display_keyboard_code(){
+    if [ "$(get_keyboard_code)" != "US" ]
+    then
+        echo -n "$(get_keyboard_code) | "
+    fi
+}
+
+display_sound(){
+    if [ $(get_sound_volume) != "100%" ] || [ $(get_sound_status) == "OFF" ]
+    then
+        echo -n "$(get_sound_status) $(get_sound_volume) | "
+    fi
+}
+
+display_battery(){
+    for batpath in /sys/class/power_supply/BAT*
+    do
+        batstatus="$(cat $batpath/status | cut -c1-3 | tr '[a-z]' '[A-Z]')"
+        batcapacity="$(cat $batpath/capacity)"
+
+        if [ "$batstatus" == "DIS" ]; then
+            if (($batcapacity <= 5))
+            then
+                if ((("$(date '+%S')" % 2) == 0))
+                then
+                    batcolor="\x04"
+                fi
+            elif (($batcapacity <= 10))
+            then
+                batcolor="\x04"
+            elif (($batcapacity <= 20))
+            then
+                batcolor="\x03"
+            else
+                batcolor="\x01"
+            fi
+            echo -n "$batcolor$batstatus $batcapacity | "
+        elif [ "$batstatus" == "CHA" ]; then
+            batcolor="\x05"
+            echo -n "$batcolor$batstatus $batcapacity | "
+        fi
+    done
+}
+
+display_date(){
+    echo -n "$(get_time_date)"
+}
+
+display(){
+    xsetroot -name " $(display_available_storage)$(display_keyboard_code)$(display_sound)$(display_battery)$(display_date) "
+}
+
+if [ "$1" == "once" ]
+then
+    display
+else
+    while true
+    do
+        display
+        sleep 1
+    done
+fi
